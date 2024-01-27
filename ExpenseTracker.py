@@ -3,6 +3,7 @@
                                                   ###################
 
 import os
+from parsers.RevolutParser import RevolutParser
 
 class ExpenseTracker:
 
