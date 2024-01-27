@@ -1,5 +1,9 @@
 # Expense Tracker
 
+## Project setup
+1. Run "make install" to setup a python environment with all the requirements already installed.
+2. Run "make" to run the application.
+
 ## Overview
 
 This project aims at developing a simple terminal app for tracking expenses across multiple banks or services.
