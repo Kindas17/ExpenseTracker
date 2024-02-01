@@ -3,6 +3,11 @@
 run:
 	@. env/bin/activate; python3 main.py
 
+
+testparser:
+	@. env/bin/activate; python3 RevolutParser_test.py
+
+
 install:
 	@printf "\nExpense Tracker - Build\n\n"
 	@printf "1. Building the python enviroment\n"
@@ -13,6 +18,12 @@ install:
 
 	@printf "\n\n>>> READY <<<\n\n"
 
-clean:
-	@rm -rf env
 
+clean:
+	@rm -rf __pycache__
+	@rm -rf core/__pycache__
+	@rm -rf parsers/__pycache__
+
+
+fullclean: clean
+	@rm -rf env
