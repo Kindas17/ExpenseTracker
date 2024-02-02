@@ -2,6 +2,33 @@
                                                    # Revolut Parser #
                                                    ##################
 
+#################################################### DESCRIPTION ####
+# |- Type -
+# |--- TOPUP:        Transactions towards the target account,
+# |                  amount should be considered as positive.
+# |--- FEE:          Expenses for services offered by Revolut.
+# |                  Amount should be considered as negative.
+# |--- CARD_PAYMENT: General payments through cards connected with
+# |                  revolut account.
+# |--- TRANSFER:     Money exchanged between accounts or internal
+# |                  vaults.
+# |--- CARD_REFUND:  Refunds of a card payment. Should be
+# |                  considered as a positive transaction.
+# |--- EXCHANGE:     Currency conversion. Negative is currency
+# |                  is different than EUR. Positive otherwise.
+# |--- ATM:          ATM money exchange.
+# |
+# | - Product -
+# | --- Current:     Transaction concerns current account.
+# | --- Savings:     Transaction concerns savings account.
+# |
+# | - State -
+# | --- COMPLETED:   Transaction is completed and valid.
+# | --- REVERTED:    Transaction has been reverted and can be
+# |                  discarded.
+# | --- PENDING:     Transaction has not been completed yet.
+#####################################################################
+
 import os
 import pandas as pd
 from core.Transaction import Transaction
@@ -34,6 +61,12 @@ class RevolutParser:
 
     def __isFileValid(self, df: pd.DataFrame) -> bool:
         return (df.columns == self.DEFAULT_REVOLUT_FILE_COLUMNS).all()
+    
+
+
+    def processTransactions(self):
+        # Remove unused columns
+        self.df = self.df.drop(['Currency', 'Completed Date'], axis = 1)
 
 
 
