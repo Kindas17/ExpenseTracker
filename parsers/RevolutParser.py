@@ -2,7 +2,7 @@
                                                    # Revolut Parser #
                                                    ##################
 
-#################################################### DESCRIPTION ####
+############################################### DATA DESCRIPTION ####
 # |- Type -
 # |--- TOPUP:        Transactions towards the target account,
 # |                  amount should be considered as positive.
@@ -28,10 +28,29 @@
 # |                  discarded.
 # | --- PENDING:     Transaction has not been completed yet.
 #####################################################################
+#
+############################################ PROCESSING STRATEGY ####
+#
+# 1. Remove all transactions that are not completed yet (PENDING)
+#    and all transactions that were REVERTED.
+#    State column can be removed at this point: only COMPLETED
+#    transactions should remain.
+#####################################################################
 
 import os
 import pandas as pd
+import logging
 from core.Transaction import Transaction
+
+
+# Define the logger
+logger = logging.getLogger(__name__)
+fileHandler = logging.FileHandler('test.log', mode = 'w')
+formatter = logging.Formatter('%(asctime)s: %(name)s - %(levelname)s - %(message)s')
+fileHandler.setFormatter(formatter)
+logger.addHandler(fileHandler)
+logger.setLevel(logging.DEBUG)
+
 
 class RevolutParser:
 
@@ -41,21 +60,31 @@ class RevolutParser:
         'Balance'
     ]
 
+    RETURN_CODES = {
+        0: 'Everything was ok',
+        1: 'Error occurred',
+    }
+
 
 
     def __init__(self, filepath: str) -> None:
-        
+
         # Verify file existence
         if (os.path.isfile(filepath)):
             self.filepath = filepath
+            logger.debug('Filepath is valid')
 
             # Read transaction file
             df = pd.read_excel(self.filepath)
             self.isUsable = self.__isFileValid(df)
-            if (self.isUsable): self.df = df
+            if (self.isUsable):
+                logger.debug('Dataframe has been assigned')
+                self.df = df
+            else: 
+                logger.error('Dataframe is not usable!')
 
         else:
-            print(f'FAIL: {filepath} is not a file!')
+            logger.error(f'{filepath} is not a file!')
 
 
 
@@ -65,16 +94,29 @@ class RevolutParser:
 
 
     def processTransactions(self):
-        # Remove unused columns
-        self.df = self.df.drop(['Currency', 'Completed Date'], axis = 1)
-
-
-
-    def getRawTrnsData(self):
-        if (hasattr(self, 'df')):
-            return self.df
+        errorCode = self.__defaultStep1()
+        if (errorCode == 1):
+            logger.error('Processing step 1 returned an error')
+            return 1
         else:
-            return None
+            logger.info('Processing Step 1 completed')
+
+
+
+    def __defaultStep1(self) -> int:
+        self.df = self.df[self.df.State != 'PENDING']
+        self.df = self.df[self.df.State != 'REVERTED']
+        logger.debug('Removed all transactions that are PENDING or REVERTED')
+
+        # Check if state column has only COMPLETED transactions
+        if ((self.df.State == 'COMPLETED').all()):
+            self.df = self.df.drop(['State'], axis = 1)
+            logger.debug('Removed State column')
+            return 0
+        else:
+            leftovers = self.df[self.df.State != 'COMPLETED'].State.unique()
+            logger.error('Some transactions have an unknown state: {}'.format(leftovers))
+            return 1
 
 
 # The End
