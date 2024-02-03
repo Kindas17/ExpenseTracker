@@ -40,6 +40,8 @@
 import os
 import pandas as pd
 import logging
+import datetime
+import time
 from core.Transaction import Transaction
 
 
@@ -99,7 +101,10 @@ class RevolutParser:
             logger.error('Processing step 1 returned an error')
             return 1
         else:
-            logger.info('Processing Step 1 completed')
+            logger.debug('Processing Step 1 completed')
+
+        self.transactions = []
+        self.transactions = self.__processingTOPUP()
 
 
 
@@ -117,6 +122,50 @@ class RevolutParser:
             leftovers = self.df[self.df.State != 'COMPLETED'].State.unique()
             logger.error('Some transactions have an unknown state: {}'.format(leftovers))
             return 1
+        
 
+
+    def __processingTOPUP(self) -> int:
+        tmp_df = self.df[self.df.Type == 'TOPUP'].copy()
+
+        # Ignore Type column
+        tmp_df = tmp_df.drop(['Type'], axis = 1)
+
+        tmp_df['Sender'] = ['Unknown' for _ in range(len(tmp_df))]
+        tmp_df['Receiver'] = ['THIS' for _ in range(len(tmp_df))]
+
+        # Verify that all products are "Current"
+        if ((tmp_df.Product == 'Current').all()):
+            tmp_df = tmp_df.drop(['Product'], axis = 1)
+        else:
+            logger.error('Not all products are Current')
+
+        # Ignore the Completed Date and Balance columns
+        tmp_df = tmp_df.drop(['Balance', 'Completed Date'], axis = 1)
+
+        # Check if the Fee columns contains something (don't know how to deal with it yet..)
+        if (tmp_df.Fee.sum() == 0):
+            tmp_df = tmp_df.drop(['Fee'], axis = 1)
+        else:
+            logger.error('Fee columns has to be considered')
+
+        logger.debug('Preprocessing of TOPUP transactions completed')
+
+
+        transactions = []
+        for _, row in tmp_df.iterrows():
+            transactions.append(
+                Transaction(
+                    timestamp = int(
+                        (row['Started Date'] - Transaction.DEFAULT_START_DATE).total_seconds()),
+                    amount = row.Amount,
+                    sender = row.Sender,
+                    receiver = row.Receiver,
+                    currency = row.Currency,
+                    description = row.Description
+                )
+            )
+
+        return transactions
 
 # The End

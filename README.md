@@ -11,7 +11,9 @@ This project aims at developing a simple terminal app for tracking expenses acro
 ## What is a transaction?
 The whole project has to deal with transactions. They are represented as a simple object with attributes:
 - date
-- amount (positive or negative)
+- sender
+- receiver
+- amount (always positive)
 - currency
 - tag representing a category
 
