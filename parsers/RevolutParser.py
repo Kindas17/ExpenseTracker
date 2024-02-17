@@ -48,10 +48,25 @@ from core.Transaction import Transaction
 # Define the logger
 logger = logging.getLogger(__name__)
 fileHandler = logging.FileHandler('test.log', mode = 'w')
-formatter = logging.Formatter('%(asctime)s: %(name)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter('-> %(asctime)s - %(levelname)s\n%(name)s: %(message)s')
 fileHandler.setFormatter(formatter)
 logger.addHandler(fileHandler)
 logger.setLevel(logging.DEBUG)
+
+
+
+# Check if the Fee columns contains something (don't know how to deal with it yet..)
+def isFeeColumnOk(df: pd.DataFrame) -> bool:
+    return (df.Fee.sum() == 0)
+
+# Verify that all products are "Current"
+def allProductIsCurrent(df: pd.DataFrame) -> bool:
+    return (df.Product == 'Current').all()
+
+# Convert a datetime pandas object into a Transaction formatted timestamp
+def convertDatetime(date: pd.Timestamp) -> int:
+    return int((date - Transaction.DEFAULT_START_DATE).total_seconds())
+
 
 
 class RevolutParser:
@@ -74,13 +89,13 @@ class RevolutParser:
         # Verify file existence
         if (os.path.isfile(filepath)):
             self.filepath = filepath
-            logger.debug('Filepath is valid')
+            logger.debug(f'Filepath is valid: {filepath}')
 
             # Read transaction file
             df = pd.read_excel(self.filepath)
             self.isUsable = self.__isFileValid(df)
             if (self.isUsable):
-                logger.debug('Dataframe has been assigned')
+                logger.debug('Dataframe has been imported successfully')
                 self.df = df
             else: 
                 logger.error('Dataframe is not usable!')
@@ -90,25 +105,31 @@ class RevolutParser:
 
 
 
+    def getDatabase(self):
+        return self.df
+
+
+
     def __isFileValid(self, df: pd.DataFrame) -> bool:
         return (df.columns == self.DEFAULT_REVOLUT_FILE_COLUMNS).all()
     
 
 
     def processTransactions(self):
-        errorCode = self.__defaultStep1()
+        errorCode = self.__preprocessing()
         if (errorCode == 1):
-            logger.error('Processing step 1 returned an error')
+            logger.error('Preprocessing returned an error')
             return 1
         else:
-            logger.debug('Processing Step 1 completed')
+            logger.debug('Preprocessing completed')
 
         self.transactions = []
-        self.transactions = self.__processingTOPUP()
+        self.transactions += self.__processingTOPUP()
+        self.transactions += self.__processingFEE()
 
 
 
-    def __defaultStep1(self) -> int:
+    def __preprocessing(self) -> int:
         self.df = self.df[self.df.State != 'PENDING']
         self.df = self.df[self.df.State != 'REVERTED']
         logger.debug('Removed all transactions that are PENDING or REVERTED')
@@ -122,50 +143,71 @@ class RevolutParser:
             leftovers = self.df[self.df.State != 'COMPLETED'].State.unique()
             logger.error('Some transactions have an unknown state: {}'.format(leftovers))
             return 1
-        
+    
+
+
+    def __processingFEE(self) -> int:
+        tmp_df = self.df[self.df.Type == 'FEE'].copy().drop(['Type', 
+                                                             'Balance', 
+                                                             'Completed Date'], axis = 1)
+
+        tmp_df['Sender'] = 'Unknown'
+        tmp_df['Receiver'] = 'THIS'
+
+
+        # Verify that all products are "Current"
+        if (not(allProductIsCurrent(tmp_df))):
+            logger.error('Not all products are Current')
+
+        # Check if the Fee columns contains something (don't know how to deal with it yet..)
+        if (not(isFeeColumnOk(tmp_df))):
+            logger.error('Fee columns has to be considered')
+
+
+        logger.debug('Processing of FEE transactions completed')
+
+
+        return [Transaction(
+                            timestamp = convertDatetime(row['Started Date']),
+                            amount = abs(row.Amount),
+                            sender = row.Sender,
+                            receiver = row.Receiver,
+                            currency = row.Currency,
+                            description = row.Description
+                            )
+                for _, row in tmp_df.iterrows()]
+
 
 
     def __processingTOPUP(self) -> int:
-        tmp_df = self.df[self.df.Type == 'TOPUP'].copy()
+        tmp_df = self.df[self.df.Type == 'TOPUP'].copy().drop(['Type', 
+                                                               'Balance', 
+                                                               'Completed Date'], axis = 1)
 
-        # Ignore Type column
-        tmp_df = tmp_df.drop(['Type'], axis = 1)
+        tmp_df['Sender'] = 'Unknown'
+        tmp_df['Receiver'] = 'THIS'
 
-        tmp_df['Sender'] = ['Unknown' for _ in range(len(tmp_df))]
-        tmp_df['Receiver'] = ['THIS' for _ in range(len(tmp_df))]
 
         # Verify that all products are "Current"
-        if ((tmp_df.Product == 'Current').all()):
-            tmp_df = tmp_df.drop(['Product'], axis = 1)
-        else:
+        if (not(allProductIsCurrent(tmp_df))):
             logger.error('Not all products are Current')
 
-        # Ignore the Completed Date and Balance columns
-        tmp_df = tmp_df.drop(['Balance', 'Completed Date'], axis = 1)
-
         # Check if the Fee columns contains something (don't know how to deal with it yet..)
-        if (tmp_df.Fee.sum() == 0):
-            tmp_df = tmp_df.drop(['Fee'], axis = 1)
-        else:
+        if (not(isFeeColumnOk(tmp_df))):
             logger.error('Fee columns has to be considered')
 
-        logger.debug('Preprocessing of TOPUP transactions completed')
+
+        logger.debug('Processing of TOPUP transactions completed')
 
 
-        transactions = []
-        for _, row in tmp_df.iterrows():
-            transactions.append(
-                Transaction(
-                    timestamp = int(
-                        (row['Started Date'] - Transaction.DEFAULT_START_DATE).total_seconds()),
-                    amount = row.Amount,
-                    sender = row.Sender,
-                    receiver = row.Receiver,
-                    currency = row.Currency,
-                    description = row.Description
-                )
-            )
-
-        return transactions
+        return [Transaction(
+                            timestamp = convertDatetime(row['Started Date']),
+                            amount = abs(row.Amount),
+                            sender = row.Sender,
+                            receiver = row.Receiver,
+                            currency = row.Currency,
+                            description = row.Description
+                            )
+                for _, row in tmp_df.iterrows()]
 
 # The End
