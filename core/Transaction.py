@@ -36,6 +36,17 @@ class Transaction:
     
     def __repr__(self):
         return f'{self.sender} -> {self.receiver}: {self.amount} {self.currency} @ {self.__reformatDate()}'
+    
+    def asDic(self):
+        return {
+            'timestamp': self.timestamp,
+            'sender': self.sender,
+            'receiver': self.receiver,
+            'amount': self.amount,
+            'currency': self.currency,
+            'description': self.description,
+            'tag': self.tag,
+        }
 
 
 

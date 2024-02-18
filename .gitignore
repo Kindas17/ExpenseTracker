@@ -161,3 +161,6 @@ cython_debug/
 
 # Ignore example files
 example_files
+
+# Ignore transactions dumps
+*.json
