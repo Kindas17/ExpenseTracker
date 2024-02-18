@@ -8,5 +8,6 @@ if __name__ == '__main__':
     for transaction in parser.transactions:
         print(transaction)
 
+    parser.getTransactionJSON()
 
 # The End

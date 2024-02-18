@@ -40,8 +40,7 @@
 import os
 import pandas as pd
 import logging
-import datetime
-import time
+import json
 from core.Transaction import Transaction
 
 
@@ -110,6 +109,13 @@ class RevolutParser:
 
 
 
+    def getTransactionJSON(self):
+        trnsx = [trn.asDic() for trn in self.transactions]
+        with open('trnsx.json', 'w') as f:
+            json.dump(trnsx, f, indent = 4)
+
+
+
     def __isFileValid(self, df: pd.DataFrame) -> bool:
         return (df.columns == self.DEFAULT_REVOLUT_FILE_COLUMNS).all()
     
@@ -126,6 +132,7 @@ class RevolutParser:
         self.transactions = []
         self.transactions += self.__processingTOPUP()
         self.transactions += self.__processingFEE()
+        self.transactions += self.__processingCARD_PAYMENT()
 
 
 
@@ -143,13 +150,48 @@ class RevolutParser:
             leftovers = self.df[self.df.State != 'COMPLETED'].State.unique()
             logger.error('Some transactions have an unknown state: {}'.format(leftovers))
             return 1
-    
+
+
+
+    def __processingCARD_PAYMENT(self) -> int:
+        myType = 'CARD_PAYMENT'
+        tmp_df = self.df[self.df.Type == myType].copy().drop(['Type', 
+                                                              'Balance', 
+                                                              'Completed Date'], axis = 1)
+
+        tmp_df['Sender'] = 'THIS'
+        tmp_df['Receiver'] = 'Unknown'
+
+
+        # Verify that all products are "Current"
+        if (not(allProductIsCurrent(tmp_df))):
+            logger.error('Not all products are Current')
+
+        # Check if the Fee columns contains something (don't know how to deal with it yet..)
+        if (not(isFeeColumnOk(tmp_df))):
+            logger.error('Fee columns has to be considered')
+
+
+        logger.debug(f'Processing of {myType} transactions completed')
+
+
+        return [Transaction(
+                            timestamp = convertDatetime(row['Started Date']),
+                            amount = abs(row.Amount),
+                            sender = row.Sender,
+                            receiver = row.Receiver,
+                            currency = row.Currency,
+                            description = row.Description
+                            )
+                for _, row in tmp_df.iterrows()]
+
 
 
     def __processingFEE(self) -> int:
-        tmp_df = self.df[self.df.Type == 'FEE'].copy().drop(['Type', 
-                                                             'Balance', 
-                                                             'Completed Date'], axis = 1)
+        myType = 'FEE'
+        tmp_df = self.df[self.df.Type == myType].copy().drop(['Type', 
+                                                              'Balance', 
+                                                              'Completed Date'], axis = 1)
 
         tmp_df['Sender'] = 'Unknown'
         tmp_df['Receiver'] = 'THIS'
@@ -164,7 +206,7 @@ class RevolutParser:
             logger.error('Fee columns has to be considered')
 
 
-        logger.debug('Processing of FEE transactions completed')
+        logger.debug(f'Processing of {myType} transactions completed')
 
 
         return [Transaction(
@@ -180,9 +222,10 @@ class RevolutParser:
 
 
     def __processingTOPUP(self) -> int:
-        tmp_df = self.df[self.df.Type == 'TOPUP'].copy().drop(['Type', 
-                                                               'Balance', 
-                                                               'Completed Date'], axis = 1)
+        myType = 'TOPUP'
+        tmp_df = self.df[self.df.Type == myType].copy().drop(['Type', 
+                                                            'Balance', 
+                                                            'Completed Date'], axis = 1)
 
         tmp_df['Sender'] = 'Unknown'
         tmp_df['Receiver'] = 'THIS'
@@ -197,7 +240,7 @@ class RevolutParser:
             logger.error('Fee columns has to be considered')
 
 
-        logger.debug('Processing of TOPUP transactions completed')
+        logger.debug(f'Processing of {myType} transactions completed')
 
 
         return [Transaction(
